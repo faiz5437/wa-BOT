@@ -6,13 +6,11 @@ const mime = require('mime-types');
 const axios = require('axios');
 const FormData = require('form-data');
 const schedule = require('node-schedule');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = '5437';
-const REMOVE_BG_API_KEY = 'hNjmLn2HLNTdGFMyC8vcmwRY'; // Ganti dengan kunci API remove.bg Anda
+const REMOVE_BG_API_KEY = 'hNjmLn2HLNTdGFMyC8vcmwRY';
 
-// Fungsi untuk menghapus latar belakang menggunakan API remove.bg
 async function removeBackground(base64Image) {
     console.log(base64Image);
     const formData = new FormData();
@@ -66,7 +64,7 @@ client.on('ready', () => {
 
 client.on('message', async message => {
     console.log('Pesan masuk dari:', message.from, 'Isi pesan:', message.body);
-    if (message.body === 'Syang') {
+    if (message.body === 'Syang' || message.body === 'Sayang' || message.body === 'Ayang') {
         message.reply('Iya kenapa sayangku Nisa Handiani ILOVEYOU 😘🥰');
     } else if (message.hasMedia && message.body.includes('Bang : hapusin dong backgroundnya')) {
         console.log("test");
@@ -74,10 +72,10 @@ client.on('message', async message => {
             const media = await message.downloadMedia();
             console.log('Media downloaded successfully:', media);
 
-            const bgRemovedImageBuffer = await removeBackground(media.data); // Ensure removeBackground returns Buffer
+            const bgRemovedImageBuffer = await removeBackground(media.data); 
             console.log('Background removal result:', bgRemovedImageBuffer);
 
-            const fileName = 'sayaganteng.png'; // Set your desired file name
+            const fileName = 'sayaganteng.png'; 
             const responseMedia = new MessageMedia(mime.lookup(fileName) || 'application/octet-stream', bgRemovedImageBuffer, fileName);
 
             await client.sendMessage(message.from, responseMedia, { caption: 'Ini Bang!', sendMediaAsDocument: true });
@@ -89,12 +87,8 @@ client.on('message', async message => {
     }
 });
 
-
 client.initialize();
-
 app.use(bodyParser.json());
-
-// Routes dan endpoint lainnya ...
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
@@ -119,38 +113,6 @@ app.post('/send-message', (req, res) => {
         res.status(500).json({ error: 'Failed to send message', details: err });
     });
 });
-
-// Fungsi untuk menghapus latar belakang menggunakan API remove.bg
-async function removeBackground(base64Image) {
-    console.log(base64Image);
-    const formData = new FormData();
-    formData.append('image_file_b64', base64Image);
-    formData.append('size', 'auto');
-
-    try {
-        const response = await axios({
-            method: 'post',
-            url: 'https://api.remove.bg/v1.0/removebg',
-            data: formData,
-            headers: {
-                ...formData.getHeaders(),
-                'X-Api-Key': REMOVE_BG_API_KEY,
-            },
-            responseType: 'arraybuffer'
-        });
-
-        if (response.status !== 200) {
-            throw new Error('Error removing background');
-        }
-
-        const bgRemovedImage = Buffer.from(response.data, 'binary').toString('base64');
-        console.log('Background removed successfully:', bgRemovedImage);
-        return bgRemovedImage;
-    } catch (error) {
-        console.error('Failed to remove background:', error.message);
-        throw error;
-    }
-}
 
 
 app.post('/send-image', async (req, res) => {
@@ -177,6 +139,40 @@ app.post('/send-image', async (req, res) => {
             const buffer = Buffer.from(response.data, 'binary').toString('base64');
             const bgRemovedImage = await removeBackground(buffer);
             media = new MessageMedia(contentType, bgRemovedImage);
+        }
+
+        client.sendMessage(chatId, media, { caption: caption || '', sendMediaAsDocument: true }).then(response => {
+            res.status(200).json({ message: 'Image sent successfully', response });
+        }).catch(err => {
+            res.status(500).json({ error: 'Failed to send image', details: err });
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to process image', details: error.message });
+    }
+});
+
+app.post('/send-image-link', async (req, res) => {
+    const apiKey = req.headers['api-key'];
+    if (apiKey !== API_KEY) {
+        return res.status(403).json({ error: 'Forbidden: Invalid API Key' });
+    }
+
+    const { number, base64Image, imageUrl, caption } = req.body;
+    if (!number || (!base64Image && !imageUrl)) {
+        return res.status(400).json({ error: 'Bad Request: Missing number or image' });
+    }
+
+    const chatId = `${number}@c.us`;
+    let media;
+
+    try {
+        if (base64Image) {
+            media = new MessageMedia(mime.lookup(base64Image) || 'image/png', base64Image);
+        } else if (imageUrl) {
+            const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+            const contentType = response.headers['content-type'];
+            const buffer = Buffer.from(response.data, 'binary').toString('base64');
+            media = new MessageMedia(contentType, buffer);
         }
 
         client.sendMessage(chatId, media, { caption: caption || '' }).then(response => {
