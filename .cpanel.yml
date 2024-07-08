@@ -1,0 +1,16 @@
+---
+deploy:
+  application:
+    name: faiz-wa-bot
+    path: /git/faiz
+  steps:
+    - name: Install dependencies
+      run: npm install
+    - name: Start application
+      run: pm2 start index.js --name faiz-wa-bot
+  environment:
+    node_version: 16.x
+  hooks:
+    after_install:
+      - name: Reload PM2 process
+        run: pm2 reload all
