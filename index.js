@@ -6,18 +6,31 @@ const mime = require('mime-types');
 const axios = require('axios');
 const FormData = require('form-data');
 const schedule = require('node-schedule');
+const mysql = require('mysql2');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = '5437';
 const REMOVE_BG_API_KEY = 'hNjmLn2HLNTdGFMyC8vcmwRY';
 
+const sharp = require('sharp');
 async function removeBackground(base64Image) {
-    console.log(base64Image);
-    const formData = new FormData();
-    formData.append('image_file_b64', base64Image);
-    formData.append('size', 'auto');
-
     try {
+        // Decode base64 image
+        const buffer = Buffer.from(base64Image, 'base64');
+
+        // Resize image using sharp
+        const resizedBuffer = await sharp(buffer)
+            .resize({ width: 1024 }) // Ubah ukuran sesuai kebutuhan
+            .toBuffer();
+
+        // Encode resized image to base64
+        const resizedBase64Image = resizedBuffer.toString('base64');
+
+        const formData = new FormData();
+        formData.append('image_file_b64', resizedBase64Image);
+        formData.append('size', 'auto');
+
         const response = await axios({
             method: 'post',
             url: 'https://api.remove.bg/v1.0/removebg',
@@ -41,6 +54,21 @@ async function removeBackground(base64Image) {
         throw error;
     }
 }
+
+const connection = mysql.createConnection({
+    host: 'localhost',
+    user: 'root', // Ganti dengan username database Anda
+    password: '', // Ganti dengan password database Anda
+    database: 'db_contact' // Ganti dengan nama database Anda
+});
+
+connection.connect((err) => {
+    if (err) {
+        console.error('Error connecting to the database:', err);
+        return;
+    }
+    console.log('Connected to the MySQL database');
+});
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -114,6 +142,35 @@ app.post('/send-message', (req, res) => {
     });
 });
 
+
+app.get('/send-morning-messages', (req, res) => {
+    const apiKey = req.headers['api-key'];
+    if (apiKey !== API_KEY) {
+        return res.status(403).json({ error: 'Forbidden: Invalid API Key' });
+    }
+
+    const query = 'SELECT *  FROM contacts';
+    connection.query(query, async (err, results) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to fetch data from database', details: err });
+        }
+
+        for (const row of results) {
+            const chatId = `${row.phone_number}@c.us`;
+            const message = `Halo selamat pagi ${row.name}, saya Faiz`; // Pesan yang akan dikirim
+
+            try {
+                await client.sendMessage(chatId, message);
+                console.log(`Pesan berhasil dikirim ke ${row.name} (${row.phone_number})`);
+            } catch (error) {
+                console.error(`Gagal mengirim pesan ke ${row.name} (${row.phone_number}):`, error.message);
+                // Lanjutkan ke iterasi berikutnya tanpa menghentikan loop
+            }
+        }
+
+        res.status(200).json({ message: 'Morning messages sent successfully, check logs for any errors.' });
+    });
+});
 
 app.post('/send-image', async (req, res) => {
     const apiKey = req.headers['api-key'];
